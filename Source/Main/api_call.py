@@ -1,11 +1,11 @@
 import requests
 import sys
 import json
+import openai
 
-
-headers = {
-    "Authorization": <github_key>
-}
+# Authenticate with Github API
+auth_token = '<github_key>'
+headers = {'Authorization':'Token ' + auth_token}
 
 owner = "Raghav-Bajaj"
 repo = "Pr-Review"
@@ -60,30 +60,18 @@ if response.status_code == 200:
       body = comment["body"]
       comments.append(body)
 
-
 # write the comments to a file
 with open("comments.txt", "w") as f:
     for comment in comments:
         f.write(comment + "\n")
 
-api_key =<gpt_key>
+openai.api_key ="<gpt_key>"
 model="text-davinci-003"
 
 def chat_with_chatgpt(prompt):
-  res = requests.post(f"https://api.openai.com/v1/completions",
-          headers = {
-              "Content-Type": "application/json",
-              "Authorization": f"Bearer {api_key}"
-          },
-          json={
-              "model": model,
-              "prompt": prompt,
-              "max_tokens": 2800,
-          }).json()
-  return res['choices'][0]['text'][1:]
-# comment=""
-# snipt_1=""
-# snipt_2=""
+    review = openai.Completion.create(engine=model, prompt=prompt, max_tokens=2800)
+    return review.choices[0].text
+
 with open("comments.txt", "r") as f:
     comment = f.read()
 
@@ -94,24 +82,24 @@ with open("delete_changes.txt", "r") as f:
     snipt_2 = f.read()
 # print(f"snipt1: {snipt_1}")
 # print(f"snipt2: {snipt_2}")
-comment_p = f"Snipt1 contains what is added to files and snipt2 contains what is removed evalute the changes on the basis of this comment if snipt1 is empty means nothing is added or if snipt2 is empty means nothing is removed {comment} and tell if it is satisfactory to merge the pr"
+comment_p = f"Evalute the changes on the basis of the provided information and tell if the code is meeting the coding standards and quality and is it satisfactory to merge the pr or not. Given: {comment}. Two Snippets will be provided namely, Snipt1 and Snipt2. Snipt1 will contain the changes added to the files and Snipt2 will contain the changes removed from the files. If Snipt1 is empty means nothing is added or if Snipt2 is empty means nothing is removed."
 # print(f"comment: {comment_p}")
-prompt = f"{comment_p} \n snipt1 {snipt_1} \n snipt2 {snipt_2}"
+prompt = f"{comment_p} \n Snipt1: {snipt_1} \n Snipt2: {snipt_2}"
+print(f"prompt: {prompt}")
 response = chat_with_chatgpt(prompt)
 print("Chatgpt:::>",end='\n')
 for i in response:
     sys.stdout.write(i)
     sys.stdout.flush()
 
+pull_response = requests.get(url2, headers=headers)
+pr_info = pull_response.json()
 
-
-
-
-
-
-
-
-
-
-
-
+# Post review as a comment on the Github PR
+comment_url = pr_info['comments_url']
+comment_body = "Automated review using OpenAI: {}\n".format(response)
+git_response = requests.post(comment_url, headers=headers, json={'body': comment_body})
+if git_response.status_code == 201:
+    print('\nReview posted successfully')
+else:
+    print('\nError posting review: {}'.format(git_response.text))
