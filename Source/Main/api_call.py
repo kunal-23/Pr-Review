@@ -41,8 +41,6 @@ url1 = f'https://api.github.com/repos/{owner}/{repo}/compare/{base}...{head}'
 
 url2 = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pull_number}"
 
-url3 = f"https://api.github.com/repos/{owner}/{repo}/issues/{pull_number}/comments"
-
 #PR details
 pr_response = requests.get(url1, headers=headers)
 
@@ -56,64 +54,30 @@ if pr_response.status_code == 200:
         patch = diff["patch"]
         fileName = diff["filename"]
         if(diff["status"] == 'modified' or diff["status"] == 'deleted'):
-            print(f'\nModified file :{fileName}');
+            print(f'\nModified or deleted file :{fileName}');
             url4 = f"https://raw.githubusercontent.com/{owner}/{repo}/{base}/{fileName}"
             response = requests.get(url4, headers=headers)
             original_file= response.text
         else:
-            print("\nNew file is being added.")  
+            print(f'\nNew file is being added :{fileName}')  
           
-        with open(f'diff_{i}.patch', 'w') as f:
-            f.write(patch)
-        with open(f'diff_{i}.patch', 'r') as f:
-            for line in f:
-                if line.startswith('+'):
-                    add_changes.append(line[1:])
-                elif line.startswith('-'):
-                    delete_changes.append(line[1:])
+        for line in patch.split('\n'):
+            if line.startswith('+'):
+                add_changes.append(line[1:])
+            elif line.startswith('-'):
+                delete_changes.append(line[1:]) 
+
+        added_changes = '\n'.join(add_changes)
+        removed_changes = '\n'.join(delete_changes)
+
+        comment_p = f"Evalute the changes on the basis of the provided information and please help me do a brief code review. The programmimg language used is JAVA. If any bug risk and improvement suggestions are welcome and tell if the code is meeting the coding standards and quality. 3 variables will be provided namely originalFile, added_changes and removed_changes. originalFile will contain the current contents of the file present in the branch for which PR is being raised. added_changes will contain the changes being added to the originalFile as part of PR and removed_changes will contain the changes removed from this file. If added_changes is empty means nothing is added or if removed_changes is empty means nothing is removed from the file. Similarly if originalFile is empty it means the entire file is new. Below provided information is related to only {fileName} file."
         
-        with open('add_changes.txt', 'w') as f:
-            f.write(''.join(add_changes))
-
-        with open('delete_changes.txt', 'w') as f:
-            f.write(''.join(delete_changes)) 
-
-        #Call to comments endpoint
-        comments_response = requests.get(url3)
-
-        # parse the response and extract the body and URL of each comment
-
-        if comments_response.status_code == 200:
-            comments = []
-            for comment in comments_response.json():
-                body = comment["body"]
-                if(not str(body).startswith('Automated review using OpenAI')):
-                    comments.append(body)
-
-        # write the comments to a file
-        with open("comments.txt", "w") as f:
-            for comment in comments:
-                f.write(comment + "\n")
-
-        with open("comments.txt", "r") as f:
-            comment = f.read()
-
-        with open("add_changes.txt", "r") as f:
-            snipt_1 = f.read()
-
-        with open("delete_changes.txt", "r") as f:
-            snipt_2 = f.read()
-        #print(f"snipt1: {snipt_1}")
-        #print(f"snipt2: {snipt_2}")
-        comment_p = f"Evalute the changes on the basis of the provided information and tell if the code is meeting the coding standards and quality and is it satisfactory to merge the pr or not. Given: {comment} 3 variables will be provided namely orgFile,Snipt1 and Snipt2. orgFile will contain the current contents of the file present in the branch for which PR is being raised. Snipt1 will contain the changes being added to the orgFile as part of PR and Snipt2 will contain the changes removed from this file. If Snipt1 is empty means nothing is added or if Snipt2 is empty means nothing is removed from the file. Simillarly if orgFile is empty it means the entire file is new. Below provided information is related to only {fileName} file."
-        # print(f"comment: {comment_p}")
-        prompt = f"{comment_p} \n orgFile: {original_file} \n Snipt1: {snipt_1} \n Snipt2: {snipt_2}"
+        prompt = f"{comment_p} \n originalFile: {original_file} \n added_changes: {added_changes} \n removed_changes: {removed_changes}"
         print(f"prompt: {prompt}")
         chatgpt_response = chat_with_chatgpt(prompt)
         print("Chatgpt:::>",end='\n')
         for i in chatgpt_response:
             sys.stdout.write(i)
-            sys.stdout.flush()
         
         post_review(headers, url2, chatgpt_response, fileName)
         
